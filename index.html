@@ -95,7 +95,9 @@
   .entry-card h2 { font-size: 12px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
 
   .form-row { display: flex; gap: 8px; align-items: flex-end; }
-  .form-group { flex: 1; }
+  .form-group { min-width: 0; }
+  .form-group.date-field { flex: 0 0 44%; }
+  .form-group.kw-field { flex: 1; }
   .form-group label { display: block; font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 5px; }
   .form-group input {
     width: 100%; background: var(--bg);
@@ -191,7 +193,7 @@
   <div class="ev-icon">⚡</div>
   <div>
     <h1>Laad Tracker</h1>
-    <p>Felix Printers · €0,25/kWh</p>
+    <p>Derwin Gibbs · Felix Printers · €0,25/kWh</p>
   </div>
 </header>
 
@@ -221,12 +223,12 @@
   <div class="entry-card">
     <h2>Sessie toevoegen</h2>
     <div class="form-row">
-      <div class="form-group">
+      <div class="form-group date-field">
         <label>Datum</label>
         <input type="date" id="inputDate">
       </div>
-      <div class="form-group">
-        <label>kWh van lader</label>
+      <div class="form-group kw-field">
+        <label>kWh</label>
         <input type="text" id="inputKw" placeholder="30,23" inputmode="decimal">
       </div>
       <button class="btn-add" id="btnAdd">+</button>
@@ -238,7 +240,6 @@
 
   <div class="export-section">
     <button class="btn-export" id="btnExport">📄 Exporteer als PDF</button>
-    <button class="btn-copy" id="btnCopy">Kopieer als tekst (voor e-mail)</button>
   </div>
 
   <div class="year-section">
@@ -417,51 +418,93 @@ document.getElementById('inputKw').addEventListener('keydown', e => {
 document.getElementById('btnExport').addEventListener('click', () => {
   const ms = getMonthSessions(currentYear, currentMonth);
   const totKw = ms.reduce((a,s) => a + s.kw, 0);
-  const rows = ms.map(s => `<tr><td>${fmtDate(s.date)}</td><td>${fmt(s.kw)}</td><td>€ ${fmt(s.kw*PRICE)}</td></tr>`).join('');
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-    body{font-family:Arial,sans-serif;padding:40px;color:#111}
-    h1{font-size:20px;margin-bottom:4px}p.sub{color:#555;font-size:13px;margin-bottom:28px}
-    table{width:100%;border-collapse:collapse;font-size:14px}
-    th{background:#2563eb;color:white;text-align:left;padding:10px 14px}
-    td{padding:9px 14px;border-bottom:1px solid #e5e7eb}
-    tr:nth-child(even) td{background:#f8fafc}
-    .total td{font-weight:bold;border-top:2px solid #2563eb;border-bottom:none}
-    .total td:last-child{color:#059669}
-    .footer{margin-top:32px;font-size:12px;color:#888}
-  </style></head><body>
-  <h1>Laden bij Felix Printers – ${MONTH_NAMES[currentMonth]} ${currentYear}</h1>
-  <p class="sub">Prijs per kWh: € ${PRICE.toFixed(2)}</p>
-  <table><thead><tr><th>Datum</th><th>kWh</th><th>Bedrag</th></tr></thead>
-  <tbody>${rows}</tbody>
-  <tfoot><tr class="total"><td>Totaal</td><td>${fmt(totKw)} kWh</td><td>€ ${fmt(totKw*PRICE)}</td></tr></tfoot>
-  </table><p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL')}</p>
-  </body></html>`;
-  const w = window.open('','_blank');
-  w.document.write(html); w.document.close();
-  setTimeout(() => w.print(), 400);
-});
+  const totCost = totKw * PRICE;
+  const rows = ms.map((s, i) => `
+    <tr>
+      <td class="num">${i + 1}</td>
+      <td>${fmtDate(s.date)}</td>
+      <td class="num">${fmt(s.kw)}</td>
+      <td class="num">€ ${fmt(s.kw * PRICE)}</td>
+    </tr>`).join('');
 
-document.getElementById('btnCopy').addEventListener('click', () => {
-  const ms = getMonthSessions(currentYear, currentMonth);
-  const totKw = ms.reduce((a,s) => a + s.kw, 0);
-  const txt = [
-    'Laden bij Felix Printers – ' + MONTH_NAMES[currentMonth] + ' ' + currentYear,
-    'Prijs/kWh: €' + PRICE.toFixed(2), '',
-    'Datum      kWh        Bedrag',
-    '─────────────────────────────────',
-    ...ms.map(s => fmtDate(s.date) + '       ' + fmt(s.kw).padStart(7) + '      €' + fmt(s.kw*PRICE)),
-    '─────────────────────────────────',
-    'Totaal     ' + fmt(totKw).padStart(7) + ' kWh  €' + fmt(totKw*PRICE)
-  ].join('\n');
-  navigator.clipboard.writeText(txt)
-    .then(() => showToast('Gekopieerd ✓'))
-    .catch(() => {
-      const ta = document.createElement('textarea');
-      ta.value = txt; document.body.appendChild(ta);
-      ta.select(); document.execCommand('copy');
-      document.body.removeChild(ta);
-      showToast('Gekopieerd ✓');
-    });
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
+    @page { margin: 28mm 20mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #111; font-size: 13px; }
+
+    .header { background: #2563eb; color: white; padding: 24px 28px; margin-bottom: 28px; }
+    .header h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .header .sub { font-size: 13px; opacity: .85; }
+
+    .meta { display: flex; gap: 32px; margin-bottom: 24px; padding: 0 4px; }
+    .meta-item label { display: block; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+    .meta-item span { font-size: 14px; font-weight: 700; color: #111; }
+
+    table { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+    thead tr { background: #1e3a6e; color: white; }
+    th { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    th.num { text-align: right; }
+    td { padding: 9px 14px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+    td.num { text-align: right; font-family: 'Courier New', monospace; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    tr:hover td { background: #eff6ff; }
+
+    tfoot tr td { background: #2563eb !important; color: white; font-weight: 700; font-size: 14px; padding: 11px 14px; border: none; }
+    tfoot tr td.num { font-family: 'Courier New', monospace; }
+    tfoot tr td.cost { color: #bbf7d0; font-size: 15px; }
+
+    .footer { margin-top: 28px; font-size: 11px; color: #aaa; text-align: right; padding: 0 4px; }
+  </style>
+  </head><body>
+
+  <div class="header">
+    <h1>⚡ Laadoverzicht – ${MONTH_NAMES[currentMonth]} ${currentYear}</h1>
+    <div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; Tarief: €${PRICE.toFixed(2)} per kWh</div>
+  </div>
+
+  <div class="meta">
+    <div class="meta-item">
+      <label>Aantal sessies</label>
+      <span>${ms.length}</span>
+    </div>
+    <div class="meta-item">
+      <label>Totaal kWh</label>
+      <span>${fmt(totKw)} kWh</span>
+    </div>
+    <div class="meta-item">
+      <label>Totaal bedrag</label>
+      <span style="color:#059669">€ ${fmt(totCost)}</span>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px">#</th>
+        <th>Datum</th>
+        <th class="num">kWh</th>
+        <th class="num">Bedrag</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2"><b>Totaal</b></td>
+        <td class="num">${fmt(totKw)} kWh</td>
+        <td class="num cost">€ ${fmt(totCost)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'})}</p>
+
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+  setTimeout(() => w.print(), 500);
 });
 
 // ── Service Worker ───────────────────────────────────────────
