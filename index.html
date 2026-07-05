@@ -335,7 +335,7 @@
 
 <script>
 const PRICE = 0.25;
-const API = 'https://script.google.com/macros/s/AKfycbymKvcMpxCDFu6d973ssis1AQysokEQXv84Dzxunq9CxkiJcnWOavT3I9QJalXe2TRaag/exec';
+const API = 'https://script.google.com/macros/s/AKfycbyLxC3YN9iJgz_nkTe47YOZ2qX_71jJAc7VQqtbzuCCqreohwV9cS7Ru0SYItcg_1gtDg/exec';
 const MONTH_NAMES = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const MONTH_SHORT = ['Jan','Feb','Mrt','Apr','Mei','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 
@@ -526,6 +526,19 @@ document.getElementById('inputKw').addEventListener('keydown', e => {
   if (e.key === 'Enter') document.getElementById('btnAdd').click();
 });
 
+function openPrint(html) {
+  const w = window.open('', '_blank');
+  w.document.write(html + `<script>
+    window.onload = function() {
+      setTimeout(function() {
+        window.print();
+        setTimeout(function() { window.close(); }, 1000);
+      }, 400);
+    };
+  <\/script>`);
+  w.document.close();
+}
+
 document.getElementById('btnExport').addEventListener('click', () => {
   const ms = getMonthSessions(currentYear, currentMonth);
   const totKw = ms.reduce((a,s) => a + s.kw, 0);
@@ -575,9 +588,7 @@ document.getElementById('btnExport').addEventListener('click', () => {
   </table>
   <p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'})}</p>
   </body></html>`;
-  const w = window.open('', '_blank');
-  w.document.write(html); w.document.close();
-  setTimeout(() => w.print(), 500);
+  openPrint(html);
 });
 
 if ('serviceWorker' in navigator) {
@@ -640,9 +651,7 @@ document.getElementById('btnExportYear').addEventListener('click', () => {
   <p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'})}</p>
   </body></html>`;
 
-  const w = window.open('', '_blank');
-  w.document.write(html); w.document.close();
-  setTimeout(() => w.print(), 500);
+  openPrint(html);
 });
 
 // Vergrendeling
