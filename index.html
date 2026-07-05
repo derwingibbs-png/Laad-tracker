@@ -195,9 +195,69 @@
   .loading { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
   .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 10px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* PIN overlay */
+  .pin-overlay {
+    position: fixed; inset: 0;
+    background: #2563eb;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 9999; gap: 20px;
+  }
+  .pin-overlay.hidden { display: none; }
+  .pin-logo { font-size: 48px; }
+  .pin-title { color: white; font-size: 22px; font-weight: 800; }
+  .pin-sub { color: rgba(255,255,255,0.7); font-size: 14px; }
+  .pin-dots { display: flex; gap: 14px; margin: 10px 0; }
+  .pin-dot {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.6);
+    background: transparent; transition: background .15s;
+  }
+  .pin-dot.filled { background: white; border-color: white; }
+  .pin-grid { display: grid; grid-template-columns: repeat(3, 72px); gap: 12px; }
+  .pin-btn {
+    width: 72px; height: 72px;
+    background: rgba(255,255,255,0.15);
+    border: none; border-radius: 50%;
+    color: white; font-size: 22px; font-weight: 700;
+    cursor: pointer; font-family: 'Inter', sans-serif;
+    transition: background .1s;
+  }
+  .pin-btn:active { background: rgba(255,255,255,0.35); }
+  .pin-btn.del { font-size: 18px; }
+  .pin-error { color: #fca5a5; font-size: 13px; font-weight: 600; min-height: 20px; }
 </style>
 </head>
 <body>
+
+<!-- PIN overlay -->
+<div class="pin-overlay" id="pinOverlay">
+  <div class="pin-logo">⚡</div>
+  <div class="pin-title">Laad Tracker</div>
+  <div class="pin-sub" id="pinSub">Voer je pincode in</div>
+  <div class="pin-dots">
+    <div class="pin-dot" id="d0"></div>
+    <div class="pin-dot" id="d1"></div>
+    <div class="pin-dot" id="d2"></div>
+    <div class="pin-dot" id="d3"></div>
+  </div>
+  <div class="pin-error" id="pinError"></div>
+  <div class="pin-grid">
+    <button class="pin-btn" data-n="1">1</button>
+    <button class="pin-btn" data-n="2">2</button>
+    <button class="pin-btn" data-n="3">3</button>
+    <button class="pin-btn" data-n="4">4</button>
+    <button class="pin-btn" data-n="5">5</button>
+    <button class="pin-btn" data-n="6">6</button>
+    <button class="pin-btn" data-n="7">7</button>
+    <button class="pin-btn" data-n="8">8</button>
+    <button class="pin-btn" data-n="9">9</button>
+    <button class="pin-btn del" data-n="del">⌫</button>
+    <button class="pin-btn" data-n="0">0</button>
+    <button class="pin-btn" data-n="ok" style="font-size:14px">OK</button>
+  </div>
+</div>
 
 <header>
   <div class="ev-icon">⚡</div>
@@ -261,6 +321,7 @@
     <button class="btn-export" id="btnExport">📄 Exporteer maand als PDF</button>
     <button class="btn-export" id="btnExportYear" style="background:#1e3a6e">📊 Exporteer jaaroverzicht als PDF</button>
     <button class="btn-export" id="btnSheets" style="background:#16a34a">🔗 Open Google Sheets</button>
+    <button class="btn-export" id="btnBackup" style="background:#7c3aed">💾 Download backup (CSV)</button>
   </div>
 
   <div class="year-section">
@@ -621,6 +682,93 @@ document.getElementById('btnLock').addEventListener('click', () => {
 document.getElementById('btnSheets').addEventListener('click', () => {
   window.open('https://docs.google.com/spreadsheets/d/1DS33lqLY6z3wDw7W3mXGEkdZDZy50OJ_TWiRDBN7Ulw/edit', '_blank');
 });
+
+// Backup knop
+document.getElementById('btnBackup').addEventListener('click', () => {
+  const rows = ['id,date,kw', ...sessions.map(s => `${s.id},${s.date},${s.kw}`)];
+  const blob = new Blob([rows.join('\n')], {type: 'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `laad-backup-${new Date().toISOString().split('T')[0]}.csv`;
+  a.click();
+  showToast('Backup gedownload ✓');
+});
+
+// ── PIN beveiliging ──────────────────────────────────────────
+const PIN_HASH_KEY = 'laad_pin_hash';
+const PIN_SESSION_KEY = 'laad_pin_session';
+const DEFAULT_PIN = '1234';
+
+async function hashPin(pin) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin + 'laadtracker'));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+async function getStoredHash() {
+  return localStorage.getItem(PIN_HASH_KEY) || await hashPin(DEFAULT_PIN);
+}
+function isPinUnlockedToday() {
+  return localStorage.getItem(PIN_SESSION_KEY) === new Date().toISOString().split('T')[0];
+}
+function unlockToday() {
+  localStorage.setItem(PIN_SESSION_KEY, new Date().toISOString().split('T')[0]);
+}
+
+let pinInput = '';
+function updateDots() {
+  for (let i = 0; i < 4; i++) {
+    document.getElementById('d' + i).classList.toggle('filled', i < pinInput.length);
+  }
+}
+
+async function checkPin() {
+  const hash = await hashPin(pinInput);
+  const stored = await getStoredHash();
+  if (hash === stored) {
+    unlockToday();
+    document.getElementById('pinOverlay').classList.add('hidden');
+    const defaultHash = await hashPin(DEFAULT_PIN);
+    if (stored === defaultHash) {
+      setTimeout(async () => {
+        if (confirm('Je gebruikt nog de standaard pincode 1234.\nWil je een nieuwe pincode instellen?')) {
+          await changePin();
+        }
+      }, 500);
+    }
+  } else {
+    document.getElementById('pinError').textContent = 'Verkeerde pincode ✕';
+    pinInput = ''; updateDots();
+    setTimeout(() => document.getElementById('pinError').textContent = '', 1500);
+  }
+}
+
+async function changePin() {
+  const newPin = prompt('Nieuwe 4-cijferige pincode:');
+  if (!newPin || newPin.length !== 4 || isNaN(newPin)) { alert('Moet 4 cijfers zijn'); return; }
+  const confirm2 = prompt('Nogmaals invoeren:');
+  if (newPin !== confirm2) { alert('Pincodes komen niet overeen'); return; }
+  localStorage.setItem(PIN_HASH_KEY, await hashPin(newPin));
+  showToast('Pincode opgeslagen ✓');
+}
+
+document.querySelectorAll('.pin-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const n = btn.dataset.n;
+    if (n === 'del') { pinInput = pinInput.slice(0, -1); updateDots(); }
+    else if (n === 'ok') { if (pinInput.length === 4) await checkPin(); }
+    else if (pinInput.length < 4) { pinInput += n; updateDots(); if (pinInput.length === 4) await checkPin(); }
+  });
+});
+
+// Pincode wijzigen knop in header (lang indrukken op ⚡)
+document.querySelector('.ev-icon').addEventListener('dblclick', async () => {
+  if (isPinUnlockedToday()) await changePin();
+});
+
+if (!isPinUnlockedToday()) {
+  document.getElementById('pinOverlay').classList.remove('hidden');
+} else {
+  document.getElementById('pinOverlay').classList.add('hidden');
+}
 </script>
 </body>
 </html>
