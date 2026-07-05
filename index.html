@@ -183,6 +183,15 @@
   .year-kw { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); min-width: 72px; text-align: right; }
   .year-cost { font-family: 'Space Mono', monospace; font-size: 12px; font-weight: 700; color: var(--accent2); min-width: 52px; text-align: right; }
 
+  .btn-lock { background: none; border: none; font-size: 20px; cursor: pointer; }
+  .lock-banner {
+    background: #fef3c7; color: #92400e;
+    font-size: 12px; font-weight: 600;
+    padding: 8px 14px; border-radius: 10px;
+    margin-bottom: 8px; display: none;
+  }
+  .lock-banner.show { display: block; }
+
   .loading { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
   .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin-bottom: 10px; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -238,14 +247,20 @@
 
   <div class="sessions-header">
     <h2>Sessies deze maand</h2>
-    <button class="btn-refresh" id="btnRefresh" title="Vernieuwen">↻</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="btn-lock" id="btnLock" title="Vergrendel maand">🔓</button>
+      <button class="btn-refresh" id="btnRefresh" title="Vernieuwen">↻</button>
+    </div>
   </div>
+  <div class="lock-banner" id="lockBanner">🔒 Deze maand is vergrendeld — sessies kunnen niet worden verwijderd</div>
   <div class="session-list" id="sessionList">
     <div class="loading"><div class="spinner"></div><br>Data laden...</div>
   </div>
 
   <div class="export-section">
-    <button class="btn-export" id="btnExport">📄 Exporteer als PDF</button>
+    <button class="btn-export" id="btnExport">📄 Exporteer maand als PDF</button>
+    <button class="btn-export" id="btnExportYear" style="background:#1e3a6e">📊 Exporteer jaaroverzicht als PDF</button>
+    <button class="btn-export" id="btnSheets" style="background:#16a34a">🔗 Open Google Sheets</button>
   </div>
 
   <div class="year-section">
@@ -374,11 +389,12 @@ function renderMonth() {
       <span class="session-date">${fmtDate(s.date)}</span>
       <span class="session-kw">${fmt(s.kw)} kWh</span>
       <span class="session-price">€${fmt(s.kw * PRICE)}</span>
-      <button class="btn-del" data-id="${s.id}">✕</button>
+      <button class="btn-del" data-id="${s.id}" ${isLocked(currentYear, currentMonth) ? 'disabled style="opacity:.2;cursor:not-allowed"' : ''}>✕</button>
     </div>`).join('');
-  list.querySelectorAll('.btn-del').forEach(btn => {
+  list.querySelectorAll('.btn-del:not([disabled])').forEach(btn => {
     btn.addEventListener('click', () => deleteSession(btn.dataset.id));
   });
+  updateLockUI();
 }
 
 function renderYear() {
@@ -426,10 +442,10 @@ loadFromSheets();
 })();
 
 document.getElementById('prevMonth').addEventListener('click', () => {
-  if (--currentMonth < 0) { currentMonth = 11; currentYear--; } renderMonth();
+  if (--currentMonth < 0) { currentMonth = 11; currentYear--; } renderMonth(); updateLockUI();
 });
 document.getElementById('nextMonth').addEventListener('click', () => {
-  if (++currentMonth > 11) { currentMonth = 0; currentYear++; } renderMonth();
+  if (++currentMonth > 11) { currentMonth = 0; currentYear++; } renderMonth(); updateLockUI();
 });
 
 document.getElementById('btnRefresh').addEventListener('click', () => loadFromSheets());
@@ -506,6 +522,105 @@ document.getElementById('btnExport').addEventListener('click', () => {
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
 }
+
+// Jaaroverzicht PDF
+document.getElementById('btnExportYear').addEventListener('click', () => {
+  const totaalJaar = Array.from({length:12}, (_,i) => {
+    const ms = getMonthSessions(currentYear, i);
+    return { month: i, sessions: ms, kw: ms.reduce((a,s) => a+s.kw, 0) };
+  });
+  const totKwJaar = totaalJaar.reduce((a,m) => a + m.kw, 0);
+
+  const rows = totaalJaar.map(m => `
+    <tr>
+      <td>${MONTH_NAMES[m.month]}</td>
+      <td class="num">${m.sessions.length}</td>
+      <td class="num">${fmt(m.kw)}</td>
+      <td class="num">€ ${fmt(m.kw * PRICE)}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
+    @page { margin: 28mm 20mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; color: #111; font-size: 13px; }
+    .header { background: #1e3a6e; color: white; padding: 24px 28px; margin-bottom: 28px; }
+    .header h1 { font-size: 22px; font-weight: 800; margin-bottom: 4px; }
+    .header .sub { font-size: 13px; opacity: .85; }
+    .meta { display: flex; gap: 32px; margin-bottom: 24px; padding: 0 4px; }
+    .meta-item label { display: block; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+    .meta-item span { font-size: 14px; font-weight: 700; color: #111; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #1e3a6e; color: white; }
+    th { padding: 10px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+    th.num { text-align: right; }
+    td { padding: 9px 14px; border-bottom: 1px solid #e5e7eb; font-size: 13px; }
+    td.num { text-align: right; font-family: 'Courier New', monospace; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    tfoot tr td { background: #1e3a6e !important; color: white; font-weight: 700; font-size: 14px; padding: 11px 14px; border: none; }
+    tfoot tr td.num { font-family: 'Courier New', monospace; }
+    tfoot tr td.cost { color: #bbf7d0; font-size: 15px; }
+    .footer { margin-top: 28px; font-size: 11px; color: #aaa; text-align: right; }
+  </style></head><body>
+  <div class="header">
+    <h1>📊 Jaaroverzicht ${currentYear}</h1>
+    <div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; Tarief: €${PRICE.toFixed(2)} per kWh</div>
+  </div>
+  <div class="meta">
+    <div class="meta-item"><label>Totaal sessies</label><span>${totaalJaar.reduce((a,m)=>a+m.sessions.length,0)}</span></div>
+    <div class="meta-item"><label>Totaal kWh</label><span>${fmt(totKwJaar)} kWh</span></div>
+    <div class="meta-item"><label>Totaal bedrag</label><span style="color:#059669">€ ${fmt(totKwJaar*PRICE)}</span></div>
+  </div>
+  <table>
+    <thead><tr><th>Maand</th><th class="num">Sessies</th><th class="num">kWh</th><th class="num">Bedrag</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr><td><b>Totaal</b></td><td class="num">${totaalJaar.reduce((a,m)=>a+m.sessions.length,0)}</td><td class="num">${fmt(totKwJaar)} kWh</td><td class="num cost">€ ${fmt(totKwJaar*PRICE)}</td></tr></tfoot>
+  </table>
+  <p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'})}</p>
+  </body></html>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(html); w.document.close();
+  setTimeout(() => w.print(), 500);
+});
+
+// Vergrendeling
+const LOCK_KEY = 'laad_locked_months';
+function getLocked() { try { return JSON.parse(localStorage.getItem(LOCK_KEY)) || []; } catch { return []; } }
+function saveLocked(arr) { localStorage.setItem(LOCK_KEY, JSON.stringify(arr)); }
+function monthKey(y, m) { return `${y}-${String(m+1).padStart(2,'0')}`; }
+function isLocked(y, m) { return getLocked().includes(monthKey(y, m)); }
+
+function updateLockUI() {
+  const locked = isLocked(currentYear, currentMonth);
+  document.getElementById('btnLock').textContent = locked ? '🔒' : '🔓';
+  document.getElementById('lockBanner').classList.toggle('show', locked);
+}
+
+document.getElementById('btnLock').addEventListener('click', () => {
+  const locked = isLocked(currentYear, currentMonth);
+  const arr = getLocked();
+  const key = monthKey(currentYear, currentMonth);
+  if (locked) {
+    // Ontgrendelen — vraag bevestiging
+    if (confirm(`${MONTH_NAMES[currentMonth]} ${currentYear} ontgrendelen?`)) {
+      saveLocked(arr.filter(k => k !== key));
+      updateLockUI(); renderMonth();
+      showToast('Maand ontgrendeld 🔓');
+    }
+  } else {
+    // Vergrendelen
+    if (confirm(`${MONTH_NAMES[currentMonth]} ${currentYear} vergrendelen? Sessies kunnen dan niet meer worden verwijderd.`)) {
+      arr.push(key);
+      saveLocked(arr);
+      updateLockUI(); renderMonth();
+      showToast('Maand vergrendeld 🔒');
+    }
+  }
+});
+document.getElementById('btnSheets').addEventListener('click', () => {
+  window.open('https://docs.google.com/spreadsheets/d/1DS33lqLY6z3wDw7W3mXGEkdZDZy50OJ_TWiRDBN7Ulw/edit', '_blank');
+});
 </script>
 </body>
 </html>
