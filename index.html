@@ -291,7 +291,7 @@ function getMonthSessions(y, m) {
   return sessions.filter(s => {
     const d = new Date(s.date + 'T00:00:00');
     return d.getFullYear() === y && d.getMonth() === m;
-  }).sort((a,b) => a.date.localeCompare(b.date));
+  }).sort((a,b) => new Date(a.date) - new Date(b.date));
 }
 
 async function loadFromSheets() {
