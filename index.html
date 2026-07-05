@@ -259,7 +259,7 @@
 
 <script>
 const PRICE = 0.25;
-const API = 'https://script.google.com/macros/s/AKfycbwh-VESUD4BRVTJWmIrvvlxGVgPy24QQis9OYPqYQKnhxCQ9mGTxwBUF6WT4Du9qx7IIg/exec';
+const API = 'https://script.google.com/macros/s/AKfycbxVWkM0k91TIwnwREhwMoxrWl6qf_RR9XVu_jOc7z3z2j12zWXuddfb2wz1TXZxNOVxcQ/exec';
 const MONTH_NAMES = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const MONTH_SHORT = ['Jan','Feb','Mrt','Apr','Mei','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
 
@@ -297,13 +297,20 @@ function getMonthSessions(y, m) {
 async function loadFromSheets() {
   showSync('⏳ Data laden uit Google Sheets...');
   try {
-    const resp = await fetch(API);
+    const resp = await fetch(API, {redirect: 'follow'});
     const data = await resp.json();
-    sessions = data.map(r => ({
-      id: String(r.id),
-      date: String(r.date),
-      kw: parseFloat(r.kw)
-    })).filter(s => s.date && !isNaN(s.kw));
+    sessions = data.map(r => {
+      // Fix timezone: parse ISO date and take local date
+      let date = String(r.date);
+      if (date.includes('T')) {
+        const d = new Date(date);
+        // Add timezone offset to get correct local date
+        const offset = d.getTimezoneOffset() * 60000;
+        const local = new Date(d.getTime() - offset);
+        date = local.toISOString().split('T')[0];
+      }
+      return { id: String(r.id), date, kw: parseFloat(r.kw) };
+    }).filter(s => s.date && !isNaN(s.kw));
     hideSync();
     renderMonth();
     renderYear();
