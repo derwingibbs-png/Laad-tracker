@@ -374,15 +374,18 @@ if (!navigator.onLine) document.getElementById('offlineBanner').classList.add('s
   const p = new URLSearchParams(window.location.search);
   const kwRaw = p.get('kw');
   if (!kwRaw) return;
-  const kw = parseFloat(kwRaw.replace(',','.'));
-  const date = p.get('date') || today;
-  if (isNaN(kw) || kw <= 0) return;
-  if (!sessions.some(s => s.date === date && s.kw === kw)) {
-    sessions.push({id: Date.now().toString(), date, kw});
-    saveData();
-    const d = new Date(date + 'T00:00:00');
-    currentYear = d.getFullYear(); currentMonth = d.getMonth();
+  // Verwijder alles behalve cijfers, punt en komma
+  const kwClean = kwRaw.replace(/[^0-9.,]/g, '').replace(',', '.');
+  const kw = parseFloat(kwClean);
+  const date = (p.get('date') || today).trim();
+  if (isNaN(kw) || kw <= 0) {
+    setTimeout(() => showToast('⚠️ Ongeldig getal: ' + kwRaw), 400);
+    return;
   }
+  sessions.push({id: Date.now().toString(), date, kw});
+  saveData();
+  const d = new Date(date + 'T00:00:00');
+  currentYear = d.getFullYear(); currentMonth = d.getMonth();
   window.history.replaceState({}, '', window.location.pathname);
   setTimeout(() => showToast('✓ ' + fmt(kw) + ' kWh opgeslagen'), 400);
 })();
