@@ -140,6 +140,8 @@ animation: slideIn .15s ease;
 .session-price { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--accent2); font-weight: 700; }
 .btn-del { background: none; border: none; color: #cbd5e1; font-size: 18px; cursor: pointer; padding: 0 2px; line-height: 1; }
 .btn-del:active { color: #ef4444; }
+.btn-edit { background: none; border: none; color: #cbd5e1; font-size: 16px; cursor: pointer; padding: 0 2px; line-height: 1; }
+.btn-edit:active { color: var(--accent); }
 
 .empty-state { text-align: center; color: var(--muted); font-size: 13px; padding: 30px 0; line-height: 1.9; }
 
@@ -183,6 +185,20 @@ width: 28px; height: 28px; border-radius: 7px;
 display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .year-header button:active { opacity: .6; }
+.year-compare {
+padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--bg);
+}
+.yc-bars { display: flex; flex-direction: column; gap: 6px; }
+.yc-row {
+display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 2px 0;
+}
+.yc-row.active .yc-year, .yc-row.active .yc-kw { color: var(--accent); font-weight: 800; }
+.yc-year { font-size: 11px; font-weight: 600; min-width: 78px; color: var(--muted); }
+.yc-kw { font-family: 'Space Mono', monospace; font-size: 11px; color: var(--muted); min-width: 72px; text-align: right; }
+.yc-delta { margin-top: 8px; font-size: 12px; font-weight: 700; text-align: center; }
+.yc-delta.up { color: #dc2626; }
+.yc-delta.down { color: var(--accent2); }
+.yc-delta.flat { color: var(--muted); }
 .year-row {
 display: flex; align-items: center; padding: 9px 16px;
 border-bottom: 1px solid var(--border); gap: 10px;
@@ -337,7 +353,7 @@ transition: background .1s;
 <div class="stat">
 <div class="stat-label">Kosten</div>
 <div class="stat-value green" id="totalCost">€0,00</div>
-<div class="stat-unit">à €0,25/kWh</div>
+<div class="stat-unit" id="priceUnit" style="cursor:pointer;text-decoration:underline dotted">à €0,25/kWh ✎</div>
 </div>
 </div>
 
@@ -373,6 +389,9 @@ transition: background .1s;
 <button class="btn-export" id="btnExportYear" style="background:#1e3a6e">📊 Exporteer jaaroverzicht als PDF</button>
 <button class="btn-export" id="btnSheets" style="background:#16a34a">🔗 Open Google Sheets</button>
 <button class="btn-export" id="btnBackup" style="background:#7c3aed">💾 Download backup (CSV)</button>
+<div id="reportEmailLine" style="text-align:center;font-size:12px;color:var(--muted);cursor:pointer;padding-top:2px">
+📧 Maandrapport gaat naar: <span id="reportEmailValue">...</span> ✎
+</div>
 </div>
 
 <div class="year-section">
@@ -381,6 +400,7 @@ transition: background .1s;
 <h2 id="yearTitle">Jaaroverzicht</h2>
 <button id="yearNext">›</button>
 </div>
+<div id="yearCompare" class="year-compare"></div>
 <div id="yearRows"></div>
 </div>
 
@@ -402,7 +422,7 @@ transition: background .1s;
 <div class="toast" id="toast"></div>
 
 <script>
-const PRICE = 0.25;
+let PRICE = parseFloat(localStorage.getItem('laad_price')) || 0.25;
 const API = 'https://script.google.com/macros/s/AKfycbynFa0DgV5D3rE_PYZpl-f17pLF7A7jZJ1yB7Q-0Ods8hNyvDt9RFr-MPHDZXZ2x6Kxag/exec';
 const MONTH_NAMES = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const MONTH_SHORT = ['Jan','Feb','Mrt','Apr','Mei','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
@@ -413,6 +433,7 @@ let sessions = [];
 let loading = false;
 
 function fmt(n) { return Number(n).toLocaleString('nl-NL', {minimumFractionDigits:2, maximumFractionDigits:2}); }
+function sumCost(list) { return list.reduce((a,s) => a + s.kw * (s.price !== undefined ? s.price : PRICE), 0); }
 function fmtDate(iso) {
 const d = new Date(iso + 'T00:00:00');
 return d.toLocaleDateString('nl-NL', {day:'2-digit', month:'2-digit'});
@@ -454,7 +475,7 @@ const offset = d.getTimezoneOffset() * 60000;
 const local = new Date(d.getTime() - offset);
 date = local.toISOString().split('T')[0];
 }
-return { id: String(r.id), date, kw: parseFloat(r.kw) };
+return { id: String(r.id), date, kw: parseFloat(r.kw), price: (r.price !== undefined && r.price !== '' && !isNaN(parseFloat(r.price))) ? parseFloat(r.price) : 0.25 };
 }).filter(s => s.date && !isNaN(s.kw));
 hideSync();
 renderMonth();
@@ -468,7 +489,7 @@ renderYear();
 
 async function addSession(date, kw) {
 const id = Date.now().toString();
-const session = {id, date, kw};
+const session = {id, date, kw, price: PRICE};
 sessions.push(session);
 renderMonth(); renderYear();
 showSync('⏳ Opslaan...');
@@ -482,6 +503,40 @@ showSync('✓ Opgeslagen in Google Sheets', 'success');
 showSync('❌ Opslaan mislukt — probeer opnieuw', 'error');
 sessions = sessions.filter(s => s.id !== id);
 renderMonth(); renderYear();
+}
+}
+
+async function editSession(id) {
+const session = sessions.find(s => s.id === id);
+if (!session) return;
+const newKwRaw = prompt('Nieuwe kWh-waarde:', String(session.kw).replace('.', ','));
+if (newKwRaw === null) return;
+const newKw = parseFloat(newKwRaw.replace(',', '.'));
+if (isNaN(newKw) || newKw <= 0) { showToast('Vul een geldig kWh-getal in'); return; }
+if (newKw > 60 && !confirm(`${fmt(newKw)} kWh is ongebruikelijk hoog. Weet je zeker dat dit klopt?`)) return;
+const newDate = prompt('Nieuwe datum (JJJJ-MM-DD):', session.date);
+if (newDate === null) return;
+if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { showToast('Datum moet het formaat JJJJ-MM-DD hebben'); return; }
+
+const backup = {...session};
+session.kw = newKw;
+session.date = newDate;
+renderMonth(); renderYear();
+showSync('⏳ Bijwerken...');
+try {
+await fetch(API, {
+method: 'POST',
+body: JSON.stringify({action: 'edit', id, date: newDate, kw: newKw})
+});
+showSync('✓ Bijgewerkt', 'success');
+} catch(e) {
+showSync('❌ Bijwerken mislukt', 'error');
+Object.assign(session, backup);
+renderMonth(); renderYear();
+}
+const d = new Date(newDate + 'T00:00:00');
+if (d.getFullYear() !== currentYear || d.getMonth() !== currentMonth) {
+goToMonth(d.getFullYear(), d.getMonth());
 }
 }
 
@@ -508,7 +563,8 @@ document.getElementById('monthLabel').textContent = MONTH_NAMES[currentMonth] + 
 const ms = getMonthSessions(currentYear, currentMonth);
 const totKw = ms.reduce((a,s) => a + s.kw, 0);
 document.getElementById('totalKw').textContent = fmt(totKw);
-document.getElementById('totalCost').textContent = '€' + fmt(totKw * PRICE);
+document.getElementById('totalCost').textContent = '€' + fmt(sumCost(ms));
+document.getElementById('priceUnit').textContent = `à €${PRICE.toFixed(2).replace('.',',')}/kWh ✎`;
 const list = document.getElementById('sessionList');
 if (!ms.length) {
 list.innerHTML = '<div class="empty-state">Geen sessies deze maand.<br>Voeg een sessie toe hierboven.</div>';
@@ -518,13 +574,67 @@ list.innerHTML = ms.map(s => `
 <div class="session-item">
 <span class="session-date">${fmtDate(s.date)}</span>
 <span class="session-kw">${fmt(s.kw)} kWh</span>
-<span class="session-price">€${fmt(s.kw * PRICE)}</span>
+<span class="session-price">€${fmt(s.kw * (s.price !== undefined ? s.price : PRICE))}</span>
+<button class="btn-edit" data-id="${s.id}" ${isLocked(currentYear, currentMonth) ? 'disabled style="opacity:.2;cursor:not-allowed"' : ''} title="Bewerken">✎</button>
 <button class="btn-del" data-id="${s.id}" ${isLocked(currentYear, currentMonth) ? 'disabled style="opacity:.2;cursor:not-allowed"' : ''}>✕</button>
 </div>`).join('');
+list.querySelectorAll('.btn-edit:not([disabled])').forEach(btn => {
+btn.addEventListener('click', () => editSession(btn.dataset.id));
+});
 list.querySelectorAll('.btn-del:not([disabled])').forEach(btn => {
 btn.addEventListener('click', () => deleteSession(btn.dataset.id));
 });
 updateLockUI();
+}
+
+function renderYearCompare() {
+const box = document.getElementById('yearCompare');
+const nowYear = new Date().getFullYear();
+const nowMonthCap = new Date().getMonth() + 1;
+
+const dataYears = new Set(sessions.map(s => new Date(s.date + 'T00:00:00').getFullYear()));
+dataYears.add(currentYear);
+const years = Array.from(dataYears).sort((a,b) => a - b);
+
+if (years.length === 0) { box.innerHTML = ''; return; }
+
+const totals = years.map(y => {
+const cap = y === nowYear ? nowMonthCap : 12;
+let kw = 0;
+for (let i = 0; i < cap; i++) kw += getMonthSessions(y, i).reduce((a,s) => a + s.kw, 0);
+return { year: y, kw, cap };
+});
+
+const maxKw = Math.max(...totals.map(t => t.kw), 1);
+
+const barsHtml = totals.map(t => {
+const pct = (t.kw / maxKw * 100).toFixed(1);
+const active = t.year === currentYear ? ' active' : '';
+const label = t.cap < 12 ? `${t.year} (t/m ${MONTH_SHORT[t.cap-1]})` : String(t.year);
+return `<div class="yc-row${active}" data-year="${t.year}">
+<span class="yc-year">${label}</span>
+<div class="bar-wrap"><div class="bar-fill" style="width:${pct}%"></div></div>
+<span class="yc-kw">${fmt(t.kw)} kWh</span>
+</div>`;
+}).join('');
+
+const cur = totals.find(t => t.year === currentYear);
+const prev = totals.find(t => t.year === currentYear - 1);
+let deltaHtml = '';
+if (cur && prev && prev.kw > 0) {
+const diffPct = (cur.kw - prev.kw) / prev.kw * 100;
+const dir = diffPct > 0.5 ? 'up' : diffPct < -0.5 ? 'down' : 'flat';
+const arrow = dir === 'up' ? '↑' : dir === 'down' ? '↓' : '→';
+deltaHtml = `<div class="yc-delta ${dir}">${arrow} ${Math.abs(diffPct).toFixed(0)}% t.o.v. ${prev.year}</div>`;
+}
+
+box.innerHTML = `<div class="yc-bars">${barsHtml}</div>${deltaHtml}`;
+document.querySelectorAll('.yc-row').forEach(row => {
+row.addEventListener('click', () => {
+currentYear = parseInt(row.dataset.year, 10);
+renderMonth(); renderYear();
+});
+});
 }
 
 function goToMonth(y, m) {
@@ -540,16 +650,18 @@ document.getElementById('yearTitle').textContent = 'Jaaroverzicht ' + currentYea
 const maxKw = Math.max(...Array.from({length:12}, (_,i) =>
 getMonthSessions(currentYear, i).reduce((a,s) => a + s.kw, 0)), 1);
 document.getElementById('yearRows').innerHTML = Array.from({length:12}, (_,i) => {
-const kw = getMonthSessions(currentYear, i).reduce((a,s) => a + s.kw, 0);
+const monthSessions = getMonthSessions(currentYear, i);
+const kw = monthSessions.reduce((a,s) => a + s.kw, 0);
 const pct = (kw / maxKw * 100).toFixed(1);
 const cur = i === nowM && currentYear === nowY ? ' current-month' : '';
 return `<div class="year-row${cur}" data-month="${i}">
 <span class="year-month">${MONTH_SHORT[i]}</span>
 <div class="bar-wrap"><div class="bar-fill" style="width:${pct}%"></div></div>
 <span class="year-kw">${fmt(kw)} kWh</span>
-<span class="year-cost">€${fmt(kw * PRICE)}</span>
+<span class="year-cost">€${fmt(sumCost(monthSessions))}</span>
 </div>`;
 }).join('');
+renderYearCompare();
 document.querySelectorAll('.year-row').forEach(row => {
 row.addEventListener('click', () => goToMonth(currentYear, parseInt(row.dataset.month, 10)));
 });
@@ -562,7 +674,35 @@ currentMonth = now.getMonth();
 const today = now.toISOString().split('T')[0];
 document.getElementById('inputDate').value = today;
 
+async function loadReportEmail() {
+try {
+const resp = await fetch(API + '?getEmail=1');
+const email = (await resp.text()).trim();
+document.getElementById('reportEmailValue').textContent = email || 'onbekend';
+} catch(e) {
+document.getElementById('reportEmailValue').textContent = 'onbekend';
+}
+}
+
+document.getElementById('reportEmailLine').addEventListener('click', async () => {
+const current = document.getElementById('reportEmailValue').textContent;
+const input = prompt('E-mailadres voor het automatische maandrapport:', current === 'onbekend' ? '' : current);
+if (input === null) return;
+const email = input.trim();
+if (!email || email.indexOf('@') < 1) { showToast('Vul een geldig e-mailadres in'); return; }
+document.getElementById('reportEmailValue').textContent = email;
+showSync('⏳ Opslaan...');
+try {
+await fetch(API, { method: 'POST', body: JSON.stringify({action: 'setEmail', email}) });
+showSync('✓ E-mailadres bijgewerkt', 'success');
+} catch(e) {
+showSync('❌ Bijwerken mislukt', 'error');
+loadReportEmail();
+}
+});
+
 loadFromSheets();
+loadReportEmail();
 
 // URL params van Shortcut
 (function() {
@@ -597,11 +737,26 @@ currentYear++; renderMonth(); renderYear(); updateLockUI();
 
 document.getElementById('btnRefresh').addEventListener('click', () => loadFromSheets());
 
+document.getElementById('priceUnit').addEventListener('click', () => {
+const current = PRICE.toFixed(2).replace('.', ',');
+const input = prompt('Nieuw tarief per kWh (€):', current);
+if (input === null) return;
+const parsed = parseFloat(input.replace(',', '.'));
+if (isNaN(parsed) || parsed <= 0) { showToast('Vul een geldig bedrag in'); return; }
+PRICE = parsed;
+localStorage.setItem('laad_price', String(parsed));
+renderMonth(); renderYear();
+showToast(`Tarief ingesteld op €${parsed.toFixed(2).replace('.',',')}/kWh`);
+});
+
 document.getElementById('btnAdd').addEventListener('click', async () => {
 const date = document.getElementById('inputDate').value;
 const kw = parseFloat(document.getElementById('inputKw').value.replace(',','.'));
 if (!date) { showToast('Kies een datum'); return; }
 if (isNaN(kw) || kw <= 0) { showToast('Vul een geldig kWh-getal in'); return; }
+if (kw > 60) {
+if (!confirm(`${fmt(kw)} kWh is ongebruikelijk hoog voor één sessie.\nWeet je zeker dat dit klopt?`)) return;
+}
 document.getElementById('inputKw').value = '';
 const d = new Date(date + 'T00:00:00');
 currentYear = d.getFullYear(); currentMonth = d.getMonth();
@@ -662,12 +817,13 @@ return String(s).replace(/[^a-zA-Z0-9]+/g, '_');
 document.getElementById('btnExport').addEventListener('click', () => {
 const ms = getMonthSessions(currentYear, currentMonth);
 const totKw = ms.reduce((a,s) => a + s.kw, 0);
+const totCost = sumCost(ms);
 const rows = ms.map((s, i) => `
 <tr>
 <td class="num">${i + 1}</td>
 <td>${fmtDate(s.date)}</td>
 <td class="num">${fmt(s.kw)}</td>
-<td class="num">€ ${fmt(s.kw * PRICE)}</td>
+<td class="num">€ ${fmt(s.kw * (s.price !== undefined ? s.price : PRICE))}</td>
 </tr>`).join('');
 const fileTitle = `Laadoverzicht_${slug(MONTH_NAMES[currentMonth])}_${currentYear}_Derwin_Gibbs`;
 const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
@@ -696,17 +852,17 @@ tfoot tr td.cost { color: #bbf7d0; font-size: 15px; }
 </style></head><body>
 <div class="header">
 <h1>⚡ Laadoverzicht – ${MONTH_NAMES[currentMonth]} ${currentYear}</h1>
-<div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; Tarief: €${PRICE.toFixed(2)} per kWh</div>
+<div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; ${ms.every(s => s.price === ms[0].price) ? `Tarief: €${(ms[0]?.price ?? PRICE).toFixed(2)} per kWh` : `Gem. tarief: €${(totKw ? (totCost/totKw) : PRICE).toFixed(2)} per kWh`}</div>
 </div>
 <div class="meta">
 <div class="meta-item"><label>Aantal sessies</label><span>${ms.length}</span></div>
 <div class="meta-item"><label>Totaal kWh</label><span>${fmt(totKw)} kWh</span></div>
-<div class="meta-item"><label>Totaal bedrag</label><span style="color:#059669">€ ${fmt(totKw*PRICE)}</span></div>
+<div class="meta-item"><label>Totaal bedrag</label><span style="color:#059669">€ ${fmt(totCost)}</span></div>
 </div>
 <table>
 <thead><tr><th style="width:40px">#</th><th>Datum</th><th class="num">kWh</th><th class="num">Bedrag</th></tr></thead>
 <tbody>${rows}</tbody>
-<tfoot><tr><td colspan="2"><b>Totaal</b></td><td class="num">${fmt(totKw)} kWh</td><td class="num cost">€ ${fmt(totKw*PRICE)}</td></tr></tfoot>
+<tfoot><tr><td colspan="2"><b>Totaal</b></td><td class="num">${fmt(totKw)} kWh</td><td class="num cost">€ ${fmt(totCost)}</td></tr></tfoot>
 </table>
 <p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'})}</p>
 </body></html>`;
@@ -721,16 +877,18 @@ navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
 document.getElementById('btnExportYear').addEventListener('click', () => {
 const totaalJaar = Array.from({length:12}, (_,i) => {
 const ms = getMonthSessions(currentYear, i);
-return { month: i, sessions: ms, kw: ms.reduce((a,s) => a+s.kw, 0) };
+return { month: i, sessions: ms, kw: ms.reduce((a,s) => a+s.kw, 0), cost: sumCost(ms) };
 });
 const totKwJaar = totaalJaar.reduce((a,m) => a + m.kw, 0);
+const totCostJaar = totaalJaar.reduce((a,m) => a + m.cost, 0);
+const allYearSessions = totaalJaar.flatMap(m => m.sessions);
 
 const rows = totaalJaar.map(m => `
 <tr>
 <td>${MONTH_NAMES[m.month]}</td>
 <td class="num">${m.sessions.length}</td>
 <td class="num">${fmt(m.kw)}</td>
-<td class="num">€ ${fmt(m.kw * PRICE)}</td>
+<td class="num">€ ${fmt(m.cost)}</td>
 </tr>`).join('');
 
 const fileTitle = `Jaaroverzicht_${currentYear}_Derwin_Gibbs`;
@@ -760,17 +918,17 @@ tfoot tr td.cost { color: #bbf7d0; font-size: 15px; }
 </style></head><body>
 <div class="header">
 <h1>📊 Jaaroverzicht ${currentYear}</h1>
-<div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; Tarief: €${PRICE.toFixed(2)} per kWh</div>
+<div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; ${allYearSessions.length && allYearSessions.every(s => s.price === allYearSessions[0].price) ? `Tarief: €${allYearSessions[0].price.toFixed(2)} per kWh` : `Gem. tarief: €${(totKwJaar ? (totCostJaar/totKwJaar) : PRICE).toFixed(2)} per kWh`}</div>
 </div>
 <div class="meta">
 <div class="meta-item"><label>Totaal sessies</label><span>${totaalJaar.reduce((a,m)=>a+m.sessions.length,0)}</span></div>
 <div class="meta-item"><label>Totaal kWh</label><span>${fmt(totKwJaar)} kWh</span></div>
-<div class="meta-item"><label>Totaal bedrag</label><span style="color:#059669">€ ${fmt(totKwJaar*PRICE)}</span></div>
+<div class="meta-item"><label>Totaal bedrag</label><span style="color:#059669">€ ${fmt(totCostJaar)}</span></div>
 </div>
 <table>
 <thead><tr><th>Maand</th><th class="num">Sessies</th><th class="num">kWh</th><th class="num">Bedrag</th></tr></thead>
 <tbody>${rows}</tbody>
-<tfoot><tr><td><b>Totaal</b></td><td class="num">${totaalJaar.reduce((a,m)=>a+m.sessions.length,0)}</td><td class="num">${fmt(totKwJaar)} kWh</td><td class="num cost">€ ${fmt(totKwJaar*PRICE)}</td></tr></tfoot>
+<tfoot><tr><td><b>Totaal</b></td><td class="num">${totaalJaar.reduce((a,m)=>a+m.sessions.length,0)}</td><td class="num">${fmt(totKwJaar)} kWh</td><td class="num cost">€ ${fmt(totCostJaar)}</td></tr></tfoot>
 </table>
 <p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'})}</p>
 </body></html>`;
@@ -818,7 +976,7 @@ window.open('https://docs.google.com/spreadsheets/d/1DS33lqLY6z3wDw7W3mXGEkdZDZy
 
 // Backup knop
 document.getElementById('btnBackup').addEventListener('click', () => {
-const rows = ['id,date,kw', ...sessions.map(s => `${s.id},${s.date},${s.kw}`)];
+const rows = ['id,date,kw,price', ...sessions.map(s => `${s.id},${s.date},${s.kw},${s.price !== undefined ? s.price : PRICE}`)];
 const blob = new Blob([rows.join('\n')], {type: 'text/csv'});
 const a = document.createElement('a');
 a.href = URL.createObjectURL(blob);
