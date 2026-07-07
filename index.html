@@ -158,11 +158,18 @@ position: fixed; bottom: 24px; left: 50%;
 transform: translateX(-50%) translateY(80px);
 background: #1e293b; color: white;
 font-weight: 600; font-size: 14px;
-padding: 12px 22px; border-radius: 50px;
+padding: 12px 14px 12px 22px; border-radius: 50px;
 transition: transform .25s ease; z-index: 999; white-space: nowrap;
 box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+display: flex; align-items: center; gap: 12px;
 }
 .toast.show { transform: translateX(-50%) translateY(0); }
+.toast #toastUndoBtn {
+background: rgba(255,255,255,0.15); border: none; color: #93c5fd;
+font-weight: 700; font-size: 13px; padding: 6px 12px; border-radius: 50px;
+cursor: pointer;
+}
+.toast #toastUndoBtn:active { background: rgba(255,255,255,0.3); }
 
 .year-section {
 margin-top: 28px; background: var(--card);
@@ -419,7 +426,7 @@ transition: background .1s;
 </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast"><span id="toastText"></span><button id="toastUndoBtn" style="display:none">Ongedaan maken</button></div>
 
 <script>
 let PRICE = parseFloat(localStorage.getItem('laad_price')) || 0.25;
@@ -441,8 +448,26 @@ return d.toLocaleDateString('nl-NL', {day:'2-digit', month:'2-digit'});
 
 function showToast(msg) {
 const t = document.getElementById('toast');
-t.textContent = msg; t.classList.add('show');
+document.getElementById('toastUndoBtn').style.display = 'none';
+document.getElementById('toastText').textContent = msg;
+t.classList.add('show');
 setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+let undoToastTimer = null;
+function showUndoToast(msg, onUndo, durationMs) {
+const t = document.getElementById('toast');
+const btn = document.getElementById('toastUndoBtn');
+document.getElementById('toastText').textContent = msg;
+btn.style.display = 'inline-block';
+btn.onclick = () => {
+t.classList.remove('show');
+clearTimeout(undoToastTimer);
+onUndo();
+};
+t.classList.add('show');
+clearTimeout(undoToastTimer);
+undoToastTimer = setTimeout(() => t.classList.remove('show'), durationMs || 5000);
 }
 
 function showSync(msg, type) {
@@ -476,7 +501,7 @@ const local = new Date(d.getTime() - offset);
 date = local.toISOString().split('T')[0];
 }
 return { id: String(r.id), date, kw: parseFloat(r.kw), price: (r.price !== undefined && r.price !== '' && !isNaN(parseFloat(r.price))) ? parseFloat(r.price) : 0.25 };
-}).filter(s => s.date && !isNaN(s.kw));
+}).filter(s => s.date && !isNaN(s.kw) && !pendingDeletes[s.id]);
 hideSync();
 renderMonth();
 renderYear();
@@ -540,10 +565,26 @@ goToMonth(d.getFullYear(), d.getMonth());
 }
 }
 
-async function deleteSession(id) {
-const backup = [...sessions];
-sessions = sessions.filter(s => s.id !== id);
+const pendingDeletes = {};
+const UNDO_WINDOW_MS = 6000;
+
+function deleteSession(id) {
+const idx = sessions.findIndex(s => s.id === id);
+if (idx === -1) return;
+const session = sessions[idx];
+sessions.splice(idx, 1);
 renderMonth(); renderYear();
+
+const timer = setTimeout(() => finalizeDelete(id), UNDO_WINDOW_MS);
+pendingDeletes[id] = { session, timer };
+
+showUndoToast(`${fmt(session.kw)} kWh (${fmtDate(session.date)}) verwijderd`, () => undoDelete(id), UNDO_WINDOW_MS);
+}
+
+async function finalizeDelete(id) {
+const pending = pendingDeletes[id];
+if (!pending) return;
+delete pendingDeletes[id];
 showSync('⏳ Verwijderen...');
 try {
 await fetch(API, {
@@ -553,9 +594,19 @@ body: JSON.stringify({action: 'delete', id})
 showSync('✓ Verwijderd', 'success');
 } catch(e) {
 showSync('❌ Verwijderen mislukt', 'error');
-sessions = backup;
+sessions.push(pending.session);
 renderMonth(); renderYear();
 }
+}
+
+function undoDelete(id) {
+const pending = pendingDeletes[id];
+if (!pending) return;
+clearTimeout(pending.timer);
+delete pendingDeletes[id];
+sessions.push(pending.session);
+renderMonth(); renderYear();
+showToast('Ongedaan gemaakt ↩️');
 }
 
 function renderMonth() {
