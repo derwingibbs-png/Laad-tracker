@@ -330,7 +330,7 @@ transition: background .1s;
 <div class="ev-icon">⚡</div>
 <div>
 <h1>Laad Tracker</h1>
-<p>Derwin Gibbs · Felix Printers · €0,25/kWh</p>
+<p>Derwin Gibbs · Felix Printers · <span id="headerPrice">€0,25/kWh</span></p>
 </div>
 </header>
 
@@ -565,6 +565,7 @@ const totKw = ms.reduce((a,s) => a + s.kw, 0);
 document.getElementById('totalKw').textContent = fmt(totKw);
 document.getElementById('totalCost').textContent = '€' + fmt(sumCost(ms));
 document.getElementById('priceUnit').textContent = `à €${PRICE.toFixed(2).replace('.',',')}/kWh ✎`;
+document.getElementById('headerPrice').textContent = `€${PRICE.toFixed(2).replace('.',',')}/kWh`;
 const list = document.getElementById('sessionList');
 if (!ms.length) {
 list.innerHTML = '<div class="empty-state">Geen sessies deze maand.<br>Voeg een sessie toe hierboven.</div>';
