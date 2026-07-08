@@ -490,38 +490,22 @@ transition: background .1s;
 
 <button class="sheet-item" id="openYear">
 <span class="icon">📊</span>
-<span>Jaaroverzicht<span class="sub">Maandtotalen &amp; jaarvergelijking</span></span>
+<span>Jaaroverzicht</span>
 </button>
 
-<div class="sheet-divider"></div>
-
-<button class="sheet-item" id="btnExport">
+<button class="sheet-item" id="openExport">
 <span class="icon">📄</span>
-<span>Exporteer maand als PDF</span>
+<span>Exporteren</span>
 </button>
-<button class="sheet-item" id="btnExportYear">
-<span class="icon">📊</span>
-<span>Exporteer jaaroverzicht als PDF</span>
-</button>
-<button class="sheet-item" id="btnBackup">
-<span class="icon">💾</span>
-<span>Download backup (CSV)</span>
-</button>
-<button class="sheet-item" id="btnSheets">
-<span class="icon">🔗</span>
-<span>Open Google Sheets</span>
-</button>
-
-<div class="sheet-divider"></div>
 
 <button class="sheet-item" id="btnLock" title="Vergrendel maand">
 <span class="icon" id="btnLockIcon">🔓</span>
-<span id="btnLockLabel">Maand vergrendelen<span class="sub">Voorkomt wijzigen/verwijderen na afsluiten</span></span>
+<span id="btnLockLabel">Maand vergrendelen</span>
 </button>
 
 <button class="sheet-item" id="openSettings">
 <span class="icon">⚙️</span>
-<span>Instellingen<span class="sub">Tarief, rapport-e-mail, pincode, thema</span></span>
+<span>Instellingen</span>
 </button>
 
 <button class="sheet-close" id="closeSheet">Sluiten</button>
@@ -541,6 +525,24 @@ transition: background .1s;
 </div>
 <div id="yearCompare" class="year-compare"></div>
 <div id="yearRows"></div>
+</div>
+</div>
+
+<!-- Exporteren subpanel -->
+<div class="subpanel-overlay" id="exportPanel">
+<div class="subpanel-header">
+<button id="closeExport">‹</button>
+<h2>Exporteren</h2>
+</div>
+<div class="subpanel-body">
+<button class="sheet-item" id="btnExportMonthPicker" style="background:var(--card);border:1px solid var(--border);margin-bottom:8px">
+<span class="icon">📄</span>
+<span>Exporteer maand als PDF<span class="sub">Kies eerst welke maand</span></span>
+</button>
+<button class="sheet-item" id="btnExportYear" style="background:var(--card);border:1px solid var(--border)">
+<span class="icon">📊</span>
+<span>Exporteer jaaroverzicht als PDF<span class="sub">Het jaar dat je nu bekijkt</span></span>
+</button>
 </div>
 </div>
 
@@ -579,6 +581,14 @@ transition: background .1s;
 <div class="settings-item" id="settingsPinRow">
 <div class="settings-item-label">Pincode wijzigen</div>
 <div class="settings-item-value">•••• ✎</div>
+</div>
+<div class="settings-item" id="btnBackup">
+<div class="settings-item-label">💾 Download backup (CSV)</div>
+<div class="settings-item-value">→</div>
+</div>
+<div class="settings-item" id="btnSheets">
+<div class="settings-item-label">🔗 Open Google Sheets</div>
+<div class="settings-item-value">→</div>
 </div>
 
 </div>
@@ -1004,6 +1014,8 @@ document.getElementById('inputKw').addEventListener('keydown', e => {
 if (e.key === 'Enter') document.getElementById('btnAdd').click();
 });
 
+let pickerMode = 'navigate'; // 'navigate' | 'exportMonth'
+
 function renderPickerMonths() {
 document.getElementById('pickerYearLabel').textContent = pickerYear;
 document.getElementById('pickerMonths').innerHTML = MONTH_SHORT.map((m, i) => {
@@ -1012,12 +1024,19 @@ return `<button class="${active.trim()}" data-month="${i}">${m}</button>`;
 }).join('');
 document.querySelectorAll('#pickerMonths button').forEach(btn => {
 btn.addEventListener('click', () => {
-goToMonth(pickerYear, parseInt(btn.dataset.month, 10));
+const y = pickerYear, m = parseInt(btn.dataset.month, 10);
 closePicker();
+if (pickerMode === 'exportMonth') {
+exportMonthPDF(y, m);
+} else {
+goToMonth(y, m);
+}
+pickerMode = 'navigate';
 });
 });
 }
-function openPicker() {
+function openPicker(mode) {
+pickerMode = mode || 'navigate';
 pickerYear = currentYear;
 renderPickerMonths();
 document.getElementById('pickerOverlay').classList.add('show');
@@ -1025,7 +1044,7 @@ document.getElementById('pickerOverlay').classList.add('show');
 function closePicker() {
 document.getElementById('pickerOverlay').classList.remove('show');
 }
-document.getElementById('monthLabel').addEventListener('click', openPicker);
+document.getElementById('monthLabel').addEventListener('click', () => openPicker('navigate'));
 document.getElementById('pickerClose').addEventListener('click', closePicker);
 document.getElementById('pickerOverlay').addEventListener('click', (e) => {
 if (e.target.id === 'pickerOverlay') closePicker();
@@ -1050,8 +1069,10 @@ function slug(s) {
 return String(s).replace(/[^a-zA-Z0-9]+/g, '_');
 }
 
-document.getElementById('btnExport').addEventListener('click', () => {
-const ms = getMonthSessions(currentYear, currentMonth);
+// Exporteert een willekeurige maand/jaar als PDF, zonder de huidige weergave
+// te veranderen (je blijft gewoon kijken naar de maand die je al open had).
+function exportMonthPDF(year, month) {
+const ms = getMonthSessions(year, month);
 const totKw = ms.reduce((a,s) => a + s.kw, 0);
 const totCost = sumCost(ms);
 const rows = ms.map((s, i) => `
@@ -1061,7 +1082,7 @@ const rows = ms.map((s, i) => `
 <td class="num">${fmt(s.kw)}</td>
 <td class="num">€ ${fmt(s.kw * (s.price !== undefined ? s.price : PRICE))}</td>
 </tr>`).join('');
-const fileTitle = `Laadoverzicht_${slug(MONTH_NAMES[currentMonth])}_${currentYear}_Derwin_Gibbs`;
+const fileTitle = `Laadoverzicht_${slug(MONTH_NAMES[month])}_${year}_Derwin_Gibbs`;
 const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <title>${fileTitle}</title>
 <style>
@@ -1087,8 +1108,8 @@ tfoot tr td.cost { color: #bbf7d0; font-size: 15px; }
 .footer { margin-top: 28px; font-size: 11px; color: #aaa; text-align: right; }
 </style></head><body>
 <div class="header">
-<h1>⚡ Laadoverzicht – ${MONTH_NAMES[currentMonth]} ${currentYear}</h1>
-<div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; ${ms.every(s => s.price === ms[0].price) ? `Tarief: €${(ms[0]?.price ?? PRICE).toFixed(2)} per kWh` : `Gem. tarief: €${(totKw ? (totCost/totKw) : PRICE).toFixed(2)} per kWh`}</div>
+<h1>⚡ Laadoverzicht – ${MONTH_NAMES[month]} ${year}</h1>
+<div class="sub">Derwin Gibbs &nbsp;·&nbsp; Felix Printers &nbsp;·&nbsp; ${ms.length && ms.every(s => s.price === ms[0].price) ? `Tarief: €${(ms[0]?.price ?? PRICE).toFixed(2)} per kWh` : `Gem. tarief: €${(totKw ? (totCost/totKw) : PRICE).toFixed(2)} per kWh`}</div>
 </div>
 <div class="meta">
 <div class="meta-item"><label>Aantal sessies</label><span>${ms.length}</span></div>
@@ -1103,7 +1124,7 @@ tfoot tr td.cost { color: #bbf7d0; font-size: 15px; }
 <p class="footer">Gegenereerd op ${new Date().toLocaleDateString('nl-NL', {day:'2-digit',month:'long',year:'numeric'})}</p>
 </body></html>`;
 openPrint(html);
-});
+}
 
 if ('serviceWorker' in navigator) {
 navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
@@ -1245,7 +1266,7 @@ sheet.addEventListener('click', (e) => {
 if (Date.now() - sheetOpenedAt < 300) return;
 const item = e.target.closest('.sheet-item');
 if (!item) return;
-if (item.id === 'openYear' || item.id === 'openSettings') return;
+if (item.id === 'openYear' || item.id === 'openSettings' || item.id === 'openExport') return;
 closeSheetFn();
 });
 
@@ -1257,6 +1278,22 @@ yearPanel.classList.add('show');
 });
 document.getElementById('closeYear').addEventListener('click', () => {
 yearPanel.classList.remove('show');
+});
+
+// ── Exporteren subpanel ────────────────────────────────────────
+const exportPanel = document.getElementById('exportPanel');
+document.getElementById('openExport').addEventListener('click', () => {
+closeSheetFn();
+exportPanel.classList.add('show');
+});
+document.getElementById('closeExport').addEventListener('click', () => {
+exportPanel.classList.remove('show');
+});
+// "Exporteer maand als PDF" vraagt nu eerst welke maand je wilt, via
+// dezelfde maand/jaar-kiezer die je ook gebruikt om te navigeren.
+document.getElementById('btnExportMonthPicker').addEventListener('click', () => {
+exportPanel.classList.remove('show');
+openPicker('exportMonth');
 });
 
 // ── Instellingen subpanel ─────────────────────────────────────
