@@ -158,18 +158,26 @@ display: none;
 .container { padding: 16px; max-width: 480px; margin: 0 auto; }
 
 .month-bar {
-display: flex; align-items: center; justify-content: space-between;
+display: flex; align-items: center; gap: 8px;
 background: var(--card); border-radius: 14px;
 padding: 10px 14px; border: 1px solid var(--border);
 box-shadow: var(--shadow); margin-bottom: 14px;
 }
-.month-bar button {
+.month-nav { flex: 1; display: flex; align-items: center; justify-content: space-between; min-width: 0; }
+.btn-today {
+background: var(--accent-light); border: none; color: var(--accent);
+font-size: 12.5px; font-weight: 700; cursor: pointer;
+padding: 7px 12px; border-radius: 8px; flex-shrink: 0;
+white-space: nowrap;
+}
+.btn-today:active { opacity: .6; }
+.month-nav button {
 background: var(--accent-light); border: none; color: var(--accent);
 font-size: 18px; font-weight: 700; cursor: pointer;
 width: 36px; height: 36px; border-radius: 8px;
 display: flex; align-items: center; justify-content: center;
 }
-.month-bar button:active { opacity: .6; }
+.month-nav button:active { opacity: .6; }
 .month-label { font-size: 16px; font-weight: 700; color: var(--text); cursor: pointer; padding: 4px 8px; border-radius: 8px; }
 .month-label:active { background: var(--accent-light); }
 
@@ -439,9 +447,12 @@ transition: background .1s;
 <div class="container">
 
 <div class="month-bar">
+<div class="month-nav">
 <button id="prevMonth">‹</button>
 <span class="month-label" id="monthLabel"></span>
 <button id="nextMonth">›</button>
+</div>
+<button id="btnToday" class="btn-today" style="display:none">Vandaag</button>
 </div>
 
 <div class="stats">
@@ -791,6 +802,8 @@ showToast('Ongedaan gemaakt ↩️');
 
 function renderMonth() {
 document.getElementById('monthLabel').textContent = MONTH_NAMES[currentMonth] + ' ' + currentYear;
+const isCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
+document.getElementById('btnToday').style.display = isCurrentMonth ? 'none' : 'inline-block';
 const ms = getMonthSessions(currentYear, currentMonth);
 const totKw = ms.reduce((a,s) => a + s.kw, 0);
 document.getElementById('totalKw').textContent = fmt(totKw);
@@ -983,6 +996,10 @@ currentYear++; renderMonth(); renderYear(); updateLockUI(); syncInputDateToView(
 });
 
 document.getElementById('btnRefresh').addEventListener('click', () => loadFromSheets());
+
+document.getElementById('btnToday').addEventListener('click', () => {
+goToMonth(now.getFullYear(), now.getMonth());
+});
 
 document.getElementById('priceUnit').addEventListener('click', () => {
 const current = PRICE.toFixed(2).replace('.', ',');
