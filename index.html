@@ -491,11 +491,9 @@ try {
 const resp = await fetch(API, {redirect: 'follow'});
 const data = await resp.json();
 sessions = data.map(r => {
-// Fix timezone: parse ISO date and take local date
 let date = String(r.date);
 if (date.includes('T')) {
 const d = new Date(date);
-// Add timezone offset to get correct local date
 const offset = d.getTimezoneOffset() * 60000;
 const local = new Date(d.getTime() - offset);
 date = local.toISOString().split('T')[0];
@@ -719,7 +717,6 @@ row.addEventListener('click', () => goToMonth(currentYear, parseInt(row.dataset.
 });
 }
 
-// Init
 const now = new Date();
 currentYear = now.getFullYear();
 currentMonth = now.getMonth();
@@ -756,7 +753,6 @@ loadReportEmail();
 loadFromSheets();
 loadReportEmail();
 
-// URL params van Shortcut
 (function() {
 const p = new URLSearchParams(window.location.search);
 const kwRaw = p.get('kw');
@@ -819,7 +815,6 @@ document.getElementById('inputKw').addEventListener('keydown', e => {
 if (e.key === 'Enter') document.getElementById('btnAdd').click();
 });
 
-// ── Maand/jaar kiezer ───────────────────────────────────────
 function renderPickerMonths() {
 document.getElementById('pickerYearLabel').textContent = pickerYear;
 document.getElementById('pickerMonths').innerHTML = MONTH_SHORT.map((m, i) => {
@@ -925,7 +920,6 @@ if ('serviceWorker' in navigator) {
 navigator.serviceWorker.register('./sw.js').catch(e => console.warn('SW:', e));
 }
 
-// Jaaroverzicht PDF
 document.getElementById('btnExportYear').addEventListener('click', () => {
 const totaalJaar = Array.from({length:12}, (_,i) => {
 const ms = getMonthSessions(currentYear, i);
@@ -988,7 +982,6 @@ tfoot tr td.cost { color: #bbf7d0; font-size: 15px; }
 openPrint(html);
 });
 
-// Vergrendeling
 const LOCK_KEY = 'laad_locked_months';
 function getLocked() { try { return JSON.parse(localStorage.getItem(LOCK_KEY)) || []; } catch { return []; } }
 function saveLocked(arr) { localStorage.setItem(LOCK_KEY, JSON.stringify(arr)); }
@@ -1006,14 +999,12 @@ const locked = isLocked(currentYear, currentMonth);
 const arr = getLocked();
 const key = monthKey(currentYear, currentMonth);
 if (locked) {
-// Ontgrendelen — vraag bevestiging
 if (confirm(`${MONTH_NAMES[currentMonth]} ${currentYear} ontgrendelen?`)) {
 saveLocked(arr.filter(k => k !== key));
 updateLockUI(); renderMonth();
 showToast('Maand ontgrendeld 🔓');
 }
 } else {
-// Vergrendelen
 if (confirm(`${MONTH_NAMES[currentMonth]} ${currentYear} vergrendelen? Sessies kunnen dan niet meer worden verwijderd.`)) {
 arr.push(key);
 saveLocked(arr);
@@ -1026,7 +1017,6 @@ document.getElementById('btnSheets').addEventListener('click', () => {
 window.open('https://docs.google.com/spreadsheets/d/1DS33lqLY6z3wDw7W3mXGEkdZDZy50OJ_TWiRDBN7Ulw/edit', '_blank');
 });
 
-// Backup knop
 document.getElementById('btnBackup').addEventListener('click', () => {
 const rows = ['id,date,kw,price', ...sessions.map(s => `${s.id},${s.date},${s.kw},${s.price !== undefined ? s.price : PRICE}`)];
 const blob = new Blob([rows.join('\n')], {type: 'text/csv'});
@@ -1038,6 +1028,12 @@ showToast('Backup gedownload ✓');
 });
 
 // ── PIN beveiliging ──────────────────────────────────────────
+// LET OP: dit is een client-side schermpje tegen toevallig kijken, geen
+// echte beveiliging — de broncode is altijd zichtbaar via "Paginabron
+// bekijken". Er zit daarom bewust GEEN universele recovery-code meer in
+// deze code (die stond hier eerder wel hardcoded en was dus voor iedereen
+// leesbaar). Ben je je pincode kwijt? Wis dan de site-data van deze pagina
+// via je browserinstellingen — dat reset 'm naar de standaardcode 1234.
 const PIN_HASH_KEY = 'laad_pin_hash';
 const PIN_SESSION_KEY = 'laad_pin_session';
 const DEFAULT_PIN = '1234';
@@ -1066,8 +1062,7 @@ document.getElementById('d' + i).classList.toggle('filled', i < pinInput.length)
 async function checkPin() {
 const hash = await hashPin(pinInput);
 const stored = await getStoredHash();
-const recoveryHash = await hashPin('0809');
-if (hash === stored || hash === recoveryHash) {
+if (hash === stored) {
 unlockToday();
 document.getElementById('pinOverlay').classList.add('hidden');
 const defaultHash = await hashPin(DEFAULT_PIN);
@@ -1108,7 +1103,6 @@ else if (pinInput.length < 4) { pinInput += n; updateDots(); if (pinInput.length
 });
 });
 
-// Pincode wijzigen knop in header (lang indrukken op ⚡)
 document.querySelector('.ev-icon').addEventListener('dblclick', async () => {
 if (isPinUnlockedToday()) await changePin();
 });
