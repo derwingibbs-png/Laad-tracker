@@ -568,6 +568,10 @@ transition: background .1s;
 <div class="settings-item-label">Tarief per kWh</div>
 <div class="settings-item-value" id="settingsPriceValue">€0,25 ✎</div>
 </div>
+<div class="settings-item" id="settingsMaxKwhRow">
+<div class="settings-item-label">Max. kWh per sessie (waarschuwing)</div>
+<div class="settings-item-value" id="settingsMaxKwhValue">60 kWh ✎</div>
+</div>
 <div class="settings-item" id="reportEmailLine">
 <div class="settings-item-label">Maandrapport e-mail</div>
 <div class="settings-item-value">📧 <span id="reportEmailValue">...</span> ✎</div>
@@ -597,6 +601,7 @@ transition: background .1s;
 
 <script>
 let PRICE = parseFloat(localStorage.getItem('laad_price')) || 0.25;
+let MAX_KWH_WARNING = parseFloat(localStorage.getItem('laad_max_kwh_warning')) || 60;
 const API = 'https://script.google.com/macros/s/AKfycbynFa0DgV5D3rE_PYZpl-f17pLF7A7jZJ1yB7Q-0Ods8hNyvDt9RFr-MPHDZXZ2x6Kxag/exec';
 const MONTH_NAMES = ['Januari','Februari','Maart','April','Mei','Juni','Juli','Augustus','September','Oktober','November','December'];
 const MONTH_SHORT = ['Jan','Feb','Mrt','Apr','Mei','Jun','Jul','Aug','Sep','Okt','Nov','Dec'];
@@ -703,7 +708,7 @@ const newKwRaw = prompt('Nieuwe kWh-waarde:', String(session.kw).replace('.', ',
 if (newKwRaw === null) return;
 const newKw = parseFloat(newKwRaw.replace(',', '.'));
 if (isNaN(newKw) || newKw <= 0) { showToast('Vul een geldig kWh-getal in'); return; }
-if (newKw > 60 && !confirm(`${fmt(newKw)} kWh is ongebruikelijk hoog. Weet je zeker dat dit klopt?`)) return;
+if (newKw > MAX_KWH_WARNING && !confirm(`${fmt(newKw)} kWh is ongebruikelijk hoog. Weet je zeker dat dit klopt?`)) return;
 const newDate = prompt('Nieuwe datum (JJJJ-MM-DD):', session.date);
 if (newDate === null) return;
 if (!/^\d{4}-\d{2}-\d{2}$/.test(newDate)) { showToast('Datum moet het formaat JJJJ-MM-DD hebben'); return; }
@@ -858,6 +863,7 @@ function goToMonth(y, m) {
 currentYear = y; currentMonth = m;
 renderMonth(); renderYear();
 syncInputDateToView();
+document.getElementById('yearPanel').classList.remove('show');
 window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
@@ -985,7 +991,7 @@ const date = document.getElementById('inputDate').value;
 const kw = parseFloat(document.getElementById('inputKw').value.replace(',','.'));
 if (!date) { showToast('Kies een datum'); return; }
 if (isNaN(kw) || kw <= 0) { showToast('Vul een geldig kWh-getal in'); return; }
-if (kw > 60) {
+if (kw > MAX_KWH_WARNING) {
 if (!confirm(`${fmt(kw)} kWh is ongebruikelijk hoog voor één sessie.\nWeet je zeker dat dit klopt?`)) return;
 }
 document.getElementById('inputKw').value = '';
@@ -1215,9 +1221,11 @@ showToast('Backup gedownload ✓');
 // ── Menu (bottom sheet) ───────────────────────────────────────
 const sheet = document.getElementById('sheet');
 const sheetOverlay = document.getElementById('sheetOverlay');
+let sheetOpenedAt = 0;
 function openSheetFn() {
 sheet.classList.add('show');
 sheetOverlay.classList.add('show');
+sheetOpenedAt = Date.now();
 }
 function closeSheetFn() {
 sheet.classList.remove('show');
@@ -1225,9 +1233,16 @@ sheetOverlay.classList.remove('show');
 }
 document.getElementById('btnMenu').addEventListener('click', openSheetFn);
 document.getElementById('closeSheet').addEventListener('click', closeSheetFn);
-sheetOverlay.addEventListener('click', closeSheetFn);
+// Kleine cooldown (300ms) na het openen: voorkomt dat een snelle dubbele
+// tik (bv. omdat de animatie nog niet meteen zichtbaar is) het menu direct
+// weer sluit doordat de tweede tik op het nu zichtbare overlay landt.
+sheetOverlay.addEventListener('click', () => {
+if (Date.now() - sheetOpenedAt < 300) return;
+closeSheetFn();
+});
 // Sluit het menu automatisch na een actie (export, sheets-link, backup, lock)
 sheet.addEventListener('click', (e) => {
+if (Date.now() - sheetOpenedAt < 300) return;
 const item = e.target.closest('.sheet-item');
 if (!item) return;
 if (item.id === 'openYear' || item.id === 'openSettings') return;
@@ -1249,6 +1264,7 @@ const settingsPanel = document.getElementById('settingsPanel');
 document.getElementById('openSettings').addEventListener('click', () => {
 closeSheetFn();
 document.getElementById('settingsPriceValue').textContent = `€${PRICE.toFixed(2).replace('.',',')} ✎`;
+document.getElementById('settingsMaxKwhValue').textContent = `${fmt(MAX_KWH_WARNING)} kWh ✎`;
 settingsPanel.classList.add('show');
 });
 document.getElementById('closeSettings').addEventListener('click', () => {
@@ -1261,6 +1277,17 @@ document.getElementById('settingsPriceValue').textContent = `€${PRICE.toFixed(
 });
 // Pincode wijzigen vanuit instellingen
 document.getElementById('settingsPinRow').addEventListener('click', () => { changePin(); });
+// Max. kWh-waarschuwing wijzigen vanuit instellingen
+document.getElementById('settingsMaxKwhRow').addEventListener('click', () => {
+const input = prompt('Vanaf hoeveel kWh per sessie wil je een waarschuwing zien?', String(MAX_KWH_WARNING).replace('.', ','));
+if (input === null) return;
+const parsed = parseFloat(input.replace(',', '.'));
+if (isNaN(parsed) || parsed <= 0) { showToast('Vul een geldig getal in'); return; }
+MAX_KWH_WARNING = parsed;
+localStorage.setItem('laad_max_kwh_warning', String(parsed));
+document.getElementById('settingsMaxKwhValue').textContent = `${fmt(parsed)} kWh ✎`;
+showToast(`Waarschuwingsgrens ingesteld op ${fmt(parsed)} kWh`);
+});
 
 // ── Thema-kleur ────────────────────────────────────────────────
 const THEME_KEY = 'laad_theme_color';
