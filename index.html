@@ -690,7 +690,23 @@ renderMonth(); renderYear();
 function goToMonth(y, m) {
 currentYear = y; currentMonth = m;
 renderMonth(); renderYear();
+syncInputDateToView();
 window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+// Houdt het datumveld van "Sessie toevoegen" gelijk aan de bekeken maand,
+// zodat je niet per ongeluk een sessie logt op de datum van vandaag terwijl
+// je een andere maand aan het bekijken bent.
+function syncInputDateToView() {
+const dateInput = document.getElementById('inputDate');
+const curVal = dateInput.value;
+let day = curVal ? parseInt(curVal.split('-')[2], 10) : now.getDate();
+const lastDay = new Date(currentYear, currentMonth + 1, 0).getDate();
+if (isNaN(day) || day < 1) day = 1;
+if (day > lastDay) day = lastDay;
+const mm = String(currentMonth + 1).padStart(2, '0');
+const dd = String(day).padStart(2, '0');
+dateInput.value = `${currentYear}-${mm}-${dd}`;
 }
 
 function renderYear() {
@@ -770,17 +786,17 @@ currentYear = d.getFullYear(); currentMonth = d.getMonth();
 })();
 
 document.getElementById('prevMonth').addEventListener('click', () => {
-if (--currentMonth < 0) { currentMonth = 11; currentYear--; } renderMonth(); renderYear(); updateLockUI();
+if (--currentMonth < 0) { currentMonth = 11; currentYear--; } renderMonth(); renderYear(); updateLockUI(); syncInputDateToView();
 });
 document.getElementById('nextMonth').addEventListener('click', () => {
-if (++currentMonth > 11) { currentMonth = 0; currentYear++; } renderMonth(); renderYear(); updateLockUI();
+if (++currentMonth > 11) { currentMonth = 0; currentYear++; } renderMonth(); renderYear(); updateLockUI(); syncInputDateToView();
 });
 
 document.getElementById('yearPrev').addEventListener('click', () => {
-currentYear--; renderMonth(); renderYear(); updateLockUI();
+currentYear--; renderMonth(); renderYear(); updateLockUI(); syncInputDateToView();
 });
 document.getElementById('yearNext').addEventListener('click', () => {
-currentYear++; renderMonth(); renderYear(); updateLockUI();
+currentYear++; renderMonth(); renderYear(); updateLockUI(); syncInputDateToView();
 });
 
 document.getElementById('btnRefresh').addEventListener('click', () => loadFromSheets());
