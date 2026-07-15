@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Laad Tracker">
-<meta name="theme-color" content="#2563eb">
+<meta name="theme-color" content="#2F6BFF">
 <link rel="apple-touch-icon" href="icon.png">
 <title>Laad Tracker</title>
 <style>
@@ -16,8 +16,8 @@
 --bg: #f1f5f9;
 --surface: #ffffff;
 --card: #ffffff;
---accent: #2563eb;
---accent-light: #dbeafe;
+--accent: #2F6BFF;
+--accent-light: #2F6BFF1a;
 --accent2: #059669;
 --text: #0f172a;
 --muted: #64748b;
@@ -45,10 +45,8 @@ gap: 12px;
 }
 .ev-icon {
 width: 40px; height: 40px;
-background: rgba(255,255,255,0.2);
-border-radius: 10px;
 display: flex; align-items: center; justify-content: center;
-font-size: 20px; flex-shrink: 0;
+flex-shrink: 0;
 }
 header h1 { font-size: 17px; font-weight: 800; }
 header p { font-size: 12px; opacity: .8; margin-top: 1px; }
@@ -122,9 +120,9 @@ width: 34px; height: 34px; border-radius: 9px; font-size: 16px; cursor: pointer;
 font-size: 12px; font-weight: 700; color: var(--muted);
 text-transform: uppercase; letter-spacing: .05em; margin-bottom: 10px;
 }
-.theme-swatches { display: flex; gap: 12px; }
+.theme-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
 .swatch {
-width: 40px; height: 40px; border-radius: 50%;
+width: 38px; height: 38px; border-radius: 50%;
 border: 3px solid transparent; cursor: pointer;
 transition: transform .12s ease, border-color .12s ease;
 position: relative;
@@ -135,7 +133,20 @@ position: relative;
 content: '✓'; position: absolute; inset: 0;
 display: flex; align-items: center; justify-content: center;
 color: white; font-size: 15px; font-weight: 700;
+text-shadow: 0 1px 2px rgba(0,0,0,0.35);
 }
+.icon-style-options { display: flex; gap: 12px; }
+.icon-style-btn {
+display: flex; flex-direction: column; align-items: center; gap: 7px;
+background: var(--card); border: 2px solid var(--border); border-radius: 14px;
+padding: 12px 16px; cursor: pointer;
+font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; color: var(--text);
+flex: 1;
+}
+.icon-style-btn.active { border-color: var(--accent); background: var(--accent-light); }
+.icon-style-btn:active { transform: scale(0.97); }
+.icon-style-preview { width: 44px; height: 44px; display: block; }
+.icon-style-preview svg { display: block; }
 .settings-item {
 display: flex; align-items: center; justify-content: space-between;
 background: var(--card); border: 1px solid var(--border);
@@ -373,13 +384,13 @@ font-weight: 700; font-size: 14px; padding: 12px; border-radius: 10px; cursor: p
 /* PIN overlay */
 .pin-overlay {
 position: fixed; inset: 0;
-background: #2563eb;
+background: var(--accent);
 display: flex; flex-direction: column;
 align-items: center; justify-content: center;
 z-index: 9999; gap: 20px;
 }
 .pin-overlay.hidden { display: none; }
-.pin-logo { font-size: 48px; }
+.pin-logo { width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; }
 .pin-title { color: white; font-size: 22px; font-weight: 800; }
 .pin-sub { color: rgba(255,255,255,0.7); font-size: 14px; }
 .pin-dots { display: flex; gap: 14px; margin: 10px 0; }
@@ -407,7 +418,7 @@ transition: background .1s;
 
 <!-- PIN overlay -->
 <div class="pin-overlay" id="pinOverlay">
-<div class="pin-logo">⚡</div>
+<div class="pin-logo" id="pinLogoIcon"></div>
 <div class="pin-title">Laad Tracker</div>
 <div class="pin-sub" id="pinSub">Voer je pincode in</div>
 <div class="pin-dots">
@@ -434,7 +445,7 @@ transition: background .1s;
 </div>
 
 <header>
-<div class="ev-icon">⚡</div>
+<div class="ev-icon" id="headerIcon"></div>
 <div style="flex:1">
 <h1>Laad Tracker</h1>
 <p>Derwin Gibbs · Felix Printers · <span id="headerPrice">€0,25/kWh</span></p>
@@ -566,15 +577,22 @@ transition: background .1s;
 <div class="subpanel-body">
 
 <div class="settings-group">
-<div class="settings-label">Thema-kleur</div>
-<div class="theme-swatches">
-<button class="swatch active" data-color="#2563eb" style="background:#2563eb" title="Blauw (standaard)" aria-label="Blauw"></button>
-<button class="swatch" data-color="#059669" style="background:#059669" title="Groen" aria-label="Groen"></button>
-<button class="swatch" data-color="#7c3aed" style="background:#7c3aed" title="Paars" aria-label="Paars"></button>
-<button class="swatch" data-color="#dc2626" style="background:#dc2626" title="Rood" aria-label="Rood"></button>
-<button class="swatch" data-color="#ea580c" style="background:#ea580c" title="Oranje" aria-label="Oranje"></button>
-<button class="swatch" data-color="#0f172a" style="background:#0f172a" title="Zwart" aria-label="Zwart"></button>
+<div class="settings-label">App icoon</div>
+<div class="icon-style-options" id="iconStyleOptions">
+<button class="icon-style-btn" data-style="bolt" id="styleBolt">
+<span class="icon-style-preview" id="previewBolt"></span>
+<span>Bliksem</span>
+</button>
+<button class="icon-style-btn" data-style="car" id="styleCar">
+<span class="icon-style-preview" id="previewCar"></span>
+<span>Bliksem in auto</span>
+</button>
 </div>
+</div>
+
+<div class="settings-group">
+<div class="settings-label">Thema-kleur</div>
+<div class="theme-swatches" id="themeSwatches"></div>
 </div>
 
 <div class="settings-item" id="settingsPriceRow">
@@ -1343,23 +1361,88 @@ document.getElementById('settingsMaxKwhValue').textContent = `${fmt(parsed)} kWh
 showToast(`Waarschuwingsgrens ingesteld op ${fmt(parsed)} kWh`);
 });
 
-// ── Thema-kleur ────────────────────────────────────────────────
+// ── App icoon & thema-kleur ──────────────────────────────────────
 const THEME_KEY = 'laad_theme_color';
-function applyThemeColor(color) {
-document.documentElement.style.setProperty('--accent', color);
-document.documentElement.style.setProperty('--accent-light', color + '1a');
-document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.color === color));
+const ICON_STYLE_KEY = 'laad_icon_style';
+const DEFAULT_COLOR = '#2F6BFF';
+const ICON_COLORS = [
+{ hex: '#2F6BFF', name: 'Blauw' },
+{ hex: '#0EA5E9', name: 'Hemelsblauw' },
+{ hex: '#14B8A6', name: 'Teal' },
+{ hex: '#22C55E', name: 'Groen' },
+{ hex: '#84CC16', name: 'Limoen' },
+{ hex: '#F59E0B', name: 'Amber' },
+{ hex: '#EF4444', name: 'Rood' },
+{ hex: '#EC4899', name: 'Roze' },
+{ hex: '#7C3AED', name: 'Violet' },
+{ hex: '#4F46E5', name: 'Indigo' },
+{ hex: '#4B5563', name: 'Grafiet' },
+{ hex: '#1C1C1E', name: 'Zwart' }
+];
+
+// Bouwt een zelfstandig icoon-badge (afgeronde vierkant + bliksem, evt. in
+// een auto) — dezelfde stijl als de geëxporteerde app-icoontjes.
+function iconSvg(style, color, size) {
+const bolt = '<path d="M13 2 4 14h7l-1 8 10-12h-7z" fill="#fff"/>';
+if (style === 'car') {
+return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<rect width="24" height="24" rx="6" fill="${color}"/>
+<path d="M6.6 3.5C5.1 3.5 4.2 4.9 4 6.6L3.1 13.9C2.9 15.2 3.7 16.1 4.8 16.1C5.7 16.1 6.4 15.4 6.4 14.5V14H17.6V14.5C17.6 15.4 18.3 16.1 19.2 16.1C20.3 16.1 21.1 15.2 20.9 13.9L20 6.6C19.8 4.9 18.9 3.5 17.4 3.5H6.6Z" fill="#fff"/>
+<path d="M13.2 6 8.6 12.8H11.5L10.9 18 15.6 11h-3l0.6-5z" fill="${color}"/>
+</svg>`;
 }
-document.querySelectorAll('.swatch').forEach(btn => {
+return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<rect width="24" height="24" rx="6" fill="${color}"/>
+${bolt}
+</svg>`;
+}
+
+function renderThemeSwatches() {
+const savedColor = (localStorage.getItem(THEME_KEY) || DEFAULT_COLOR).toLowerCase();
+const box = document.getElementById('themeSwatches');
+box.innerHTML = ICON_COLORS.map(c => `<button class="swatch${c.hex.toLowerCase() === savedColor ? ' active' : ''}" data-color="${c.hex}" style="background:${c.hex}" title="${c.name}" aria-label="${c.name}"></button>`).join('');
+box.querySelectorAll('.swatch').forEach(btn => {
 btn.addEventListener('click', () => {
 const color = btn.dataset.color;
 localStorage.setItem(THEME_KEY, color);
 applyThemeColor(color);
 });
 });
+}
+
+function renderAppIcons() {
+const color = localStorage.getItem(THEME_KEY) || DEFAULT_COLOR;
+const style = localStorage.getItem(ICON_STYLE_KEY) || 'bolt';
+document.getElementById('headerIcon').innerHTML = iconSvg(style, color, 40);
+document.getElementById('pinLogoIcon').innerHTML = iconSvg(style, color, 56);
+document.getElementById('previewBolt').innerHTML = iconSvg('bolt', color, 44);
+document.getElementById('previewCar').innerHTML = iconSvg('car', color, 44);
+document.getElementById('styleBolt').classList.toggle('active', style === 'bolt');
+document.getElementById('styleCar').classList.toggle('active', style === 'car');
+}
+
+function applyThemeColor(color) {
+document.documentElement.style.setProperty('--accent', color);
+document.documentElement.style.setProperty('--accent-light', color + '1a');
+document.querySelectorAll('.swatch').forEach(s => s.classList.toggle('active', s.dataset.color.toLowerCase() === color.toLowerCase()));
+const themeMeta = document.querySelector('meta[name="theme-color"]');
+if (themeMeta) themeMeta.setAttribute('content', color);
+renderAppIcons();
+}
+
+document.getElementById('styleBolt').addEventListener('click', () => {
+localStorage.setItem(ICON_STYLE_KEY, 'bolt');
+renderAppIcons();
+});
+document.getElementById('styleCar').addEventListener('click', () => {
+localStorage.setItem(ICON_STYLE_KEY, 'car');
+renderAppIcons();
+});
+
+renderThemeSwatches();
 (function initTheme() {
-const saved = localStorage.getItem(THEME_KEY);
-if (saved) applyThemeColor(saved);
+const saved = localStorage.getItem(THEME_KEY) || DEFAULT_COLOR;
+applyThemeColor(saved);
 })();
 
 // ── PIN beveiliging ──────────────────────────────────────────
